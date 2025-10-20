@@ -1,0 +1,29 @@
+{
+    "eyePosition": [ 0, 0, 0 ],
+    "displays": [
+        {
+            "name": "Front",
+            "DisplayIndex": "2",
+            "width": 1.92,
+            "height": 1.08,
+            "textureWidth": 1920,
+            "textureHeight": 1080
+        },
+        {
+            "name": "Left",
+            "DisplayIndex": "1",
+            "width": 1.92,
+            "height": 1.08,
+            "textureWidth": 1920,
+            "textureHeight": 1080
+        },
+        {
+            "name": "Right",
+            "DisplayIndex": "3",
+            "width": 1.92,
+            "height": 1.08,
+            "textureWidth": 1920,
+            "textureHeight": 1080
+        }
+    ]
+}
