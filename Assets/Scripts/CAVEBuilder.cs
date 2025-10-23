@@ -82,113 +82,105 @@ public class CAVEBuilder : MonoBehaviour
 
         //GetComponent<SpoutSender>().sourceTexture = finalRT;
 
-        foreach (var disp in config.displays)
-            CreateWall(disp);
+        //foreach (var disp in .displays)
+        CreateWalls(config.displays);
 
 
     }
 
-    void CreateWall(DisplayEntry config)
+    void CreateWalls(DisplayEntry[] displays)
     {
-        GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Quad);
-        wall.name = $"Wall_{config.name}";
-        wall.transform.SetParent(wallsParent, false);
-        wall.transform.localScale = new Vector3(config.width, config.height, 1);
-        wall.GetComponent<Renderer>().material = new Material(wallMaterial);
+        var front = System.Array.Find(displays, d => d.name.ToLower() == "front");
+        var left = System.Array.Find(displays, d => d.name.ToLower() == "left");
+        foreach (var disp in displays) {
+            float frontWidth = front != null ? front.width : disp.width;
+            float sideWidth = left != null ? left.width : disp.width;
 
-        Vector3 pos = Vector3.zero;
-        Vector3 wallRot = Vector3.zero;
-        float dist = 0f;
+            GameObject wall = GameObject.CreatePrimitive(PrimitiveType.Quad);
+            wall.name = $"Wall_{disp.name}";
+            wall.transform.SetParent(wallsParent, false);
+            wall.transform.localScale = new Vector3(disp.width, disp.height, 1);
+            wall.GetComponent<Renderer>().material = new Material(wallMaterial);
 
-        // compute wall distance automatically from wall size
-        switch (config.name.ToLower())
-        {
-            case "front":
-                dist = config.width / 2f;
-                pos = new Vector3(0, 0, dist);
-                wallRot = new Vector3(0, 180, 0);
-                break;
-            case "back":
-                dist = config.width / 2f;
-                pos = new Vector3(0, 0, -dist);
-                wallRot = Vector3.zero;
-                break;
-            case "left":
-                dist = config.width / 2f;
-                pos = new Vector3(-dist, 0, 0);
-                wallRot = new Vector3(0, 90, 0);
-                break;
-            case "right":
-                dist = config.width / 2f;
-                pos = new Vector3(dist, 0, 0);
-                wallRot = new Vector3(0, -90, 0);
-                break;
-            case "floor":
-                dist = config.height / 2f;
-                pos = new Vector3(0, -dist, 0);
-                wallRot = new Vector3(90, 180, 0);
-                break;
-            case "ceiling":
-                dist = config.height / 2f;
-                pos = new Vector3(0, dist, 0);
-                wallRot = new Vector3(-90, 180, 0);
-                break;
+            Vector3 pos = Vector3.zero;
+            Vector3 wallRot = Vector3.zero;
+
+            // compute wall distance automatically from wall size
+            switch (disp.name.ToLower())
+            {
+                case "front":
+                    pos = new Vector3(0, 0, sideWidth / 2f);
+                    wallRot = new Vector3(0, 180, 0);
+                    break;
+                case "back":
+                    pos = new Vector3(0, 0, -sideWidth / 2f);
+                    wallRot = Vector3.zero;
+                    break;
+                case "left":
+                    pos = new Vector3(-frontWidth / 2f, 0, 0);
+                    wallRot = new Vector3(0, 90, 0);
+                    break;
+                case "right":
+                    pos = new Vector3(frontWidth / 2f, 0, 0);
+                    wallRot = new Vector3(0, -90, 0);
+                    break;
+            }
+
+            wall.transform.localPosition = pos;
+            wall.transform.localRotation = Quaternion.Euler(wallRot + new Vector3(0, 180, 0));
+
+            int caveLayer = LayerMask.NameToLayer("CaveWalls");
+            wall.layer = caveLayer;
+
+            int displayIndex = 0;
+            int.TryParse(disp.DisplayIndex, out displayIndex);
+
+            GameObject camObj = new GameObject($"Camera_{disp.name}");
+            camObj.transform.SetParent(camerasParent, false);
+            camObj.transform.localPosition = eyeTransform.localPosition;
+            camObj.transform.LookAt(wall.transform, transform.up);
+
+            var cam = camObj.AddComponent<Camera>();
+            cam.targetDisplay = displayIndex;
+            cam.clearFlags = CameraClearFlags.Skybox;
+            cam.nearClipPlane = nearClip;
+            cam.farClipPlane = farClip;
+
+            if (!showWallsInCameras)
+                cam.cullingMask &= ~(1 << caveLayer);
+
+            Vector3 halfW = wall.transform.right * (disp.width / 2);
+            Vector3 halfH = wall.transform.up * (disp.height / 2);
+
+            Vector3 pLL = wall.transform.position - halfW - halfH;
+            Vector3 pLR = wall.transform.position + halfW - halfH;
+            Vector3 pUL = wall.transform.position - halfW + halfH;
+
+            pLL = transform.InverseTransformPoint(pLL);
+            pLR = transform.InverseTransformPoint(pLR);
+            pUL = transform.InverseTransformPoint(pUL);
+
+            var proj = camObj.AddComponent<CAVEProjection>();
+            proj.eye = eyeTransform;
+            proj.lowerLeft = CreateCorner("LL_" + disp.name, pLL);
+            proj.lowerRight = CreateCorner("LR_" + disp.name, pLR);
+            proj.upperLeft = CreateCorner("UL_" + disp.name, pUL);
+            proj.nearClip = nearClip;
+            proj.farClip = farClip;
+
+            RenderTexture rt = new RenderTexture(disp.textureWidth, disp.textureHeight, 24);
+            rt.name = $"RT_{disp.name}";
+            cam.targetTexture = rt;
+            wall.GetComponent<Renderer>().material.mainTexture = rt;
+
+            GameObject senderObg = new GameObject($"Spout_{disp.name}");
+            senderObg.transform.SetParent(spoutsParent);
+            SpoutSender sender = senderObg.AddComponent<SpoutSender>();
+            sender.SetResources(_resources);
+            sender.spoutName = disp.name;
+            sender.captureMethod = CaptureMethod.Texture;
+            sender.sourceTexture = rt;
         }
-
-        wall.transform.localPosition = pos;
-        wall.transform.localRotation = Quaternion.Euler(wallRot + new Vector3(0, 180, 0));
-
-        int caveLayer = LayerMask.NameToLayer("CaveWalls");
-        wall.layer = caveLayer;
-
-        int displayIndex = 0;
-        int.TryParse(config.DisplayIndex, out displayIndex);
-
-        GameObject camObj = new GameObject($"Camera_{config.name}");
-        camObj.transform.SetParent(camerasParent, false);
-        camObj.transform.localPosition = eyeTransform.localPosition;
-        camObj.transform.LookAt(wall.transform, transform.up);
-
-        var cam = camObj.AddComponent<Camera>();
-        cam.targetDisplay = displayIndex;
-        cam.clearFlags = CameraClearFlags.Skybox;
-        cam.nearClipPlane = nearClip;
-        cam.farClipPlane = farClip;
-
-        if (!showWallsInCameras)
-            cam.cullingMask &= ~(1 << caveLayer);
-
-        Vector3 halfW = wall.transform.right * (config.width / 2);
-        Vector3 halfH = wall.transform.up * (config.height / 2);
-
-        Vector3 pLL = wall.transform.position - halfW - halfH;
-        Vector3 pLR = wall.transform.position + halfW - halfH;
-        Vector3 pUL = wall.transform.position - halfW + halfH;
-
-        pLL = transform.InverseTransformPoint(pLL);
-        pLR = transform.InverseTransformPoint(pLR);
-        pUL = transform.InverseTransformPoint(pUL);
-
-        var proj = camObj.AddComponent<CAVEProjection>();
-        proj.eye = eyeTransform;
-        proj.lowerLeft = CreateCorner("LL_" + config.name, pLL);
-        proj.lowerRight = CreateCorner("LR_" + config.name, pLR);
-        proj.upperLeft = CreateCorner("UL_" + config.name, pUL);
-        proj.nearClip = nearClip;
-        proj.farClip = farClip;
-
-        RenderTexture rt = new RenderTexture(config.textureWidth, config.textureHeight, 24);
-        rt.name = $"RT_{config.name}";
-        cam.targetTexture = rt;
-        wall.GetComponent<Renderer>().material.mainTexture = rt;
-
-        GameObject senderObg = new GameObject($"Spout_{config.name}");
-        senderObg.transform.SetParent( spoutsParent);
-        SpoutSender sender = senderObg.AddComponent<SpoutSender>();
-        sender.SetResources(_resources);
-        sender.spoutName = config.name;
-        sender.captureMethod = CaptureMethod.Texture;
-        sender.sourceTexture = rt;
     }
 
     Transform CreateCorner(string name, Vector3 localPos)
